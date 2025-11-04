@@ -1,0 +1,54 @@
+[project]
+name = "roaringrel"
+dynamic = ["version"]
+authors = [{ name = "Hashberg" }]
+description = "Implementation of integer relations based on roaring bitmaps."
+readme = "README.rst"
+requires-python = ">=3.13"
+license = "LGPL-3.0"
+license-files = ["LICENSE"]
+dependencies = ["pyroaring >= 1.0.3"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.13",
+    "Natural Language :: English",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Documentation = "https://roaringrel.readthedocs.io"
+Repository = "https://github.com/hashberg-io/roaringrel"
+Issues = "https://github.com/hashberg-io/roaringrel/issues"
+
+[build-system]
+requires = ["hatchling == 1.26.3"]
+build-backend = "hatchling.build"
+
+[tool.black]
+target-version = ["py314"]
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+
+[tool.pyright]
+typeCheckingMode = "off"
+reportInvalidTypeForm = false
+
+[tool.hatch.version]
+path = "roaringrel/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+only-include = ["roaringrel"]
+
+[tool.hatch.build.targets.wheel.sources]
+"src" = ""
+
+[tool.hatch.build.targets.sdist]
+only-include = ["roaringrel", "README.rst", "LICENSE"]
+
+[dependency-groups]
+dev = ["pytest >= 8.4.2", "numpy >= 2.3.4"]

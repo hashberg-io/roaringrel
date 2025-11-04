@@ -1,0 +1,15 @@
+{
+    "pkg_name": "roaringrel",
+    "pkg_path": "..",
+    "apidocs_folder": "api",
+    "toc_filename": "api-toc.rst",
+    "type_alias_dict_filename": "autodoc-type-aliases.json",
+    "include_members": {},
+    "type_aliases": {},
+    "exclude_members": {},
+    "include_modules": [],
+    "exclude_modules": [],
+    "member_fullnames": {},
+    "special_class_members": {},
+    "manual_doc": {}
+}
