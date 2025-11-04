@@ -17,7 +17,7 @@ Implementation of integer relations based on
 # You should have received a copy of the GNU Lesser General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-__version__ = "1.0.0.post0"
+__version__ = "1.0.0.post1"
 
 from collections.abc import Iterable, Iterator
 from itertools import product
