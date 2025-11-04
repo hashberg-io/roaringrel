@@ -399,7 +399,7 @@ def _sigdoc(fun: FunctionType, lines: list[str]) -> None:
             return
     else:
         return_annotation = sig.return_annotation
-        if sig.return_annotation == sig.empty or sig.return_annotation is None:
+        if return_annotation == sig.empty or return_annotation is None:
             return
     if not isinstance(return_annotation, str):
         if isinstance(return_annotation, ForwardRef):
@@ -409,12 +409,15 @@ def _sigdoc(fun: FunctionType, lines: list[str]) -> None:
                 f"Found non-string return annotation: {repr(return_annotation)}."
                 " Did you forget to import annotation from __future__?."
             )
-            return_annotation = str(return_annotation)
+            if isinstance(return_annotation, type):
+                return_annotation = return_annotation.__name__
+            else:
+                return_annotation = str(return_annotation)
     try:
         if sys.version_info >= (3, 14):
             t = parse_type(return_annotation)
         else:
-            t = parse_type(sig.return_annotation)
+            t = parse_type(return_annotation)
         tx = t.crossref(globalns)
     except Exception as e:
         logger.error(
