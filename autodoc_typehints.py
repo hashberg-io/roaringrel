@@ -18,7 +18,6 @@
 # TODO: fix the documentation of Protocol methods (no methods documented).
 # TODO: clean up the handling of custom descriptors (e.g. cached_property).
 
-import annotationlib
 from collections import deque
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass
@@ -30,6 +29,13 @@ from types import FunctionType, ModuleType
 from typing import Any, ForwardRef, Optional
 from sphinx.application import Sphinx
 from sphinx.util import logging
+
+import sys
+
+if sys.version_info >= (3, 14):    
+    import annotationlib
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -334,12 +340,15 @@ def _sigdoc(fun: FunctionType, lines: list[str]) -> None:
     # FIXME: if an :rtype: line already exists, remove it here and re-append it after all param type lines.
     globalns = fun.__globals__
     sig = inspect.signature(fun)
-    annotations = annotationlib.get_annotations(fun, format=annotationlib.Format.STRING)
+    if sys.version_info >= (3, 14):
+        annotations = annotationlib.get_annotations(fun, format=annotationlib.Format.STRING)
     for p in sig.parameters.values():
-        # annotation = p.annotation
-        # if annotation == p.empty:
-        #     continue
-        annotation = annotations.get(p.name)
+        if sys.version_info >= (3, 14):
+            annotation = annotations.get(p.name)
+        else:
+            annotation = p.annotation
+            if annotation == p.empty:
+                continue
         if annotation is None:
             continue
         if not isinstance(annotation, str):
@@ -384,15 +393,19 @@ def _sigdoc(fun: FunctionType, lines: list[str]) -> None:
             lines.append(f":param {p.name}:")
         if f":type {p.name}:" not in doc:
             lines.append(line)
-    # if sig.return_annotation == sig.empty:
-    #     return
-    return_annotation = annotations.get("return")
-    if return_annotation is None:
-        return
-
+    if sys.version_info >= (3, 14):
+        return_annotation = annotations.get("return")
+        if return_annotation is None:
+            return
+    else:
+        return_annotation = sig.return_annotation
+        if sig.return_annotation == sig.empty:
+            return
     try:
-        # t = parse_type(sig.return_annotation)
-        t = parse_type(return_annotation)
+        if sys.version_info >= (3, 14):
+            t = parse_type(return_annotation)
+        else:
+            t = parse_type(sig.return_annotation)
         tx = t.crossref(globalns)
     except Exception as e:
         logger.error(
