@@ -6,7 +6,7 @@ roaringrel
 Entry
 -----
 
-.. autotype:: roaringrel.Entry
+Type alias for an entry in a relation.
 
 Rel
 ---
@@ -19,4 +19,4 @@ Rel
 Shape
 -----
 
-.. autotype:: roaringrel.Shape
+Type alias for the shape of a relation.
