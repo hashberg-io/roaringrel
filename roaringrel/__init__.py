@@ -63,7 +63,7 @@ class Rel:
     def __new__(
         cls,
         shape: Iterable[int],
-        data: BitMap64 | "Rel" | Iterable[Entry] | None = None,
+        data: BitMap64 | Iterable[Entry] | None = None,
     ) -> Self:
         """
         Creates a relation with the given shape and initial data:
