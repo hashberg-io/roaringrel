@@ -410,7 +410,7 @@ def _sigdoc(fun: FunctionType, lines: list[str]) -> None:
                 " Did you forget to import annotation from __future__?."
             )
             if isinstance(return_annotation, type):
-                return_annotation = return_annotation.__name__
+                return_annotation = return_annotation.__qualname__
             else:
                 return_annotation = str(return_annotation)
     try:
