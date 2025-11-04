@@ -56,7 +56,7 @@ class ParsedType:
     r"""Dataclass for a parsed type."""
 
     name: str
-    args: None | str | tuple[ParsedType, ...] = None
+    args: None | str | tuple["ParsedType", ...] = None
     variadic: bool = False
 
     def __post_init__(self) -> None:
