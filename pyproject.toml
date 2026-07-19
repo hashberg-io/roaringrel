@@ -3,9 +3,9 @@ name = "roaringrel"
 dynamic = ["version"]
 authors = [{ name = "Hashberg" }]
 description = "Implementation of integer relations based on roaring bitmaps."
-readme = "README.rst"
+readme = "README.md"
 requires-python = ">=3.13"
-license = "LGPL-3.0"
+license = "LGPL-3.0-or-later"
 license-files = ["LICENSE"]
 dependencies = ["pyroaring >= 1.0.3"]
 classifiers = [
@@ -24,7 +24,7 @@ Repository = "https://github.com/hashberg-io/roaringrel"
 Issues = "https://github.com/hashberg-io/roaringrel/issues"
 
 [build-system]
-requires = ["hatchling == 1.26.3"]
+requires = ["hatchling == 1.30.1"]
 build-backend = "hatchling.build"
 
 [tool.black]
@@ -44,11 +44,8 @@ path = "roaringrel/__init__.py"
 [tool.hatch.build.targets.wheel]
 only-include = ["roaringrel"]
 
-[tool.hatch.build.targets.wheel.sources]
-"src" = ""
-
 [tool.hatch.build.targets.sdist]
-only-include = ["roaringrel", "README.rst", "LICENSE"]
+only-include = ["roaringrel", "README.md", "LICENSE"]
 
 [dependency-groups]
 dev = ["pytest >= 8.4.2", "numpy >= 2.3.4"]
