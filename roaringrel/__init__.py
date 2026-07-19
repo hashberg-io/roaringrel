@@ -22,7 +22,7 @@ __version__ = "1.0.0.post1"
 from collections.abc import Iterable, Iterator
 from itertools import product
 from math import prod
-from typing import Any, Self
+from typing import Any, Self, final
 
 from pyroaring import BitMap64
 
@@ -30,9 +30,15 @@ type Shape = tuple[int, ...]
 """Type alias for the shape of a relation (see :class:`Rel`)."""
 
 type Entry = tuple[int, ...]
-"""Type alias for an entry in a relation (see :class:`Rel`)."""
+"""
+Type alias for an entry in a relation (see :class:`Rel`).
+
+Entries passed to the methods of :class:`Rel` are normalised rather than validated:
+see :ref:`entry-normalisation` for the exact contract.
+"""
 
 
+@final
 class Rel:
     r"""
     A low-level mutable data structure to store a finite relation between finite sets:
@@ -52,11 +58,53 @@ class Rel:
     to store the underlying set of entries.
 
     See :meth:`Rel.__new__` for the constructor.
+
+    **Entry normalisation.**
+    This class is designed for use in performance-critical code, so entries are
+    *normalised* rather than validated: no method which takes entries ever rejects
+    them. An entry is converted into the index of its slot as follows:
+
+    - the element in position :math:`j` is reduced modulo the component set size
+      :math:`s_j`, so that negative elements index from the end of the component set
+      (as is usual in Python) and out-of-range elements wrap around;
+    - if the entry is shorter than the shape, the missing trailing elements are taken
+      to be zero;
+    - if the entry is longer than the shape, the surplus elements are ignored.
+
+    Because every integer is reduced into the range of its own component set, this is
+    a total operation: no entry whatsoever can take a relation outside of its own
+    shape, and the invariants of the data structure hold for arbitrary integer input.
+    An out-of-range entry silently addresses a well-defined *different* entry, it does
+    not corrupt the relation.
+
+    Callers which cannot guarantee that their entries are in range should check them
+    with :meth:`Rel.validate_entry`, which exists for exactly this purpose and is
+    never called internally. Validation is therefore entirely opt-in, and code which
+    understands the tradeoff above pays nothing for it.
+
+    **Equality, ordering and hashing.**
+    Relations of different shape are never equal, but they are not ordered either:
+    :meth:`Rel.__eq__` returns :obj:`False` on a shape mismatch, whereas
+    :meth:`Rel.__lt__` and :meth:`Rel.__le__` raise :class:`ValueError`. This is
+    deliberate. Equality is total, because unrelated objects are simply unequal, while
+    containment between relations of different shape is a question about incomparable
+    domains, which is much more likely to indicate a bug in the caller than a
+    meaningful query.
+
+    Relations are mutable, and therefore unhashable: defining :meth:`Rel.__eq__`
+    without :meth:`object.__hash__` is what makes them so, by the same convention that
+    applies to :class:`set` and :class:`list`. Use :class:`frozenset` of the entries
+    where a hashable snapshot of a relation is required.
     """
 
     __shape: Shape
+    """The shape of the relation."""
+
     __data: BitMap64
+    """The bitmap of packed indices for the entries of the relation."""
+
     __strides: tuple[int, ...]
+    """The stride of each component, used to pack entries into indices."""
 
     __slots__ = ("__weakref__", "__shape", "__data", "__strides")
 
@@ -74,6 +122,18 @@ class Rel:
           creates a relation using the bitmap for the underlying set of entries;
         - if ``data`` is :obj:`None` (default), an empty relation is created.
 
+        Entries taken from an iterable are normalised, as described in
+        :ref:`entry-normalisation`. Indices taken from a :class:`Rel` or a bitmap are
+        validated instead, because they bypass normalisation entirely: this permits a
+        relation to be reinterpreted under any shape large enough to hold its indices,
+        while ruling out indices which would fall outside the new shape.
+
+        :raises ValueError: if any component set size is not strictly positive.
+        :raises ValueError: if a given relation or bitmap contains an index which is
+            out of range for the given shape.
+        :raises NotImplementedError: if the product of the component set sizes is too
+            large to be indexed by a 64-bit bitmap.
+
         :meta public:
         """
         shape = tuple(shape)
@@ -85,20 +145,22 @@ class Rel:
                 "The maximum supported size for the Cartesian product "
                 "of component sets is 2**64-1."
             )
-        self = super().__new__(cls)
+        self = object.__new__(cls)
         self.__shape = shape
         self.__strides = Rel.__strides_from_shape(shape)
         if data is None:
-            self.__data = BitMap64(data)
+            self.__data = BitMap64()
         elif isinstance(data, BitMap64):
-            data = data.copy()
-            full_bitmap = BitMap64()
-            full_bitmap.add_range(0, total_size)
-            if not data <= full_bitmap:
+            if data and data.max() >= total_size:
                 raise ValueError("Data bitmap contains invalid entries.")
-            self.__data = data
+            self.__data = data.copy()
         elif isinstance(data, Rel):
-            self.__data = data.__data.copy()
+            other_data = data.__data
+            if other_data and other_data.max() >= total_size:
+                raise ValueError(
+                    "Given relation contains entries which are invalid for this shape."
+                )
+            self.__data = other_data.copy()
         else:
             # We can use __pack_entry here because it does not access the __data attr:
             packed_entries = [self.__pack_entry(entry) for entry in data]
@@ -106,13 +168,13 @@ class Rel:
         return self
 
     @property
-    def shape(self) -> tuple[int, ...]:
+    def shape(self) -> Shape:
         """The shape of the relation, i.e. the tuple of sizes for its component sets."""
         return self.__shape
 
     def copy(self) -> "Rel":
         """Returns a copy of the relation (independently mutable)."""
-        copy = super().__new__(Rel)
+        copy = object.__new__(Rel)
         copy.__shape = self.__shape
         copy.__strides = self.__strides
         copy.__data = self.__data.copy()
@@ -121,6 +183,14 @@ class Rel:
     def validate_entry(self, entry: Entry) -> None:
         """
         Validates the given entry against the shape of the relation.
+
+        This method is never called internally: the methods of this class normalise
+        entries instead of validating them, as described in :ref:`entry-normalisation`.
+        It is provided as a convenience for callers which cannot otherwise guarantee
+        that an entry is in range, and which would rather have an error than address a
+        different entry by accident. Validating every entry is significantly more
+        expensive than the operations it guards, so it is left to the caller to decide
+        where that cost is worth paying.
 
         :raises ValueError: if the entry is not valid for the shape.
         """
@@ -138,7 +208,11 @@ class Rel:
                 )
 
     def add(self, entry: Entry) -> None:
-        """Adds the given entry to the relation."""
+        """
+        Adds the given entry to the relation.
+
+        The entry is normalised, not validated: see :ref:`entry-normalisation`.
+        """
         idx = self.__pack_entry(entry)
         self.__data.add(idx)
 
@@ -146,7 +220,9 @@ class Rel:
         """
         Removes the given entry from the relation.
 
-        :raises KeyError: if the tuple is not in the relation.
+        The entry is normalised, not validated: see :ref:`entry-normalisation`.
+
+        :raises KeyError: if the entry is not in the relation.
         """
         idx = self.__pack_entry(entry)
         bitmap = self.__data
@@ -158,6 +234,8 @@ class Rel:
         """
         Removes the entry from the relation if it is in the relation;
         otherwise, adds the entry to the relation.
+
+        The entry is normalised, not validated: see :ref:`entry-normalisation`.
         """
         idx = self.__pack_entry(entry)
         bitmap = self.__data
@@ -167,14 +245,22 @@ class Rel:
             bitmap.add(idx)
 
     def update(self, *entry_sets: Iterable[Entry]) -> None:
-        """Adds all entries from all given iterables to the relation."""
+        """
+        Adds all entries from all given iterables to the relation.
+
+        Entries are normalised, not validated: see :ref:`entry-normalisation`.
+        """
         packed_entries = [
             self.__pack_entry(entry) for entry_set in entry_sets for entry in entry_set
         ]
         self.__data.update(packed_entries)
 
     def difference_update(self, *entry_sets: Iterable[Entry]) -> None:
-        """Removes all entries from all given iterables from the relation."""
+        """
+        Removes all entries from all given iterables from the relation.
+
+        Entries are normalised, not validated: see :ref:`entry-normalisation`.
+        """
         packed_entries = [
             self.__pack_entry(entry) for entry_set in entry_sets for entry in entry_set
         ]
@@ -189,7 +275,9 @@ class Rel:
 
         Note that the given entries are considered without repetition, so that multiple
         occurrences of the same entry in the given iterables don't result in multiple
-        flips.
+        flips. Because entries are normalised rather than validated (see
+        :ref:`entry-normalisation`), entries which normalise to the same slot count as
+        repetitions of each other.
         """
         packed_entries = [
             self.__pack_entry(entry) for entry_set in entry_sets for entry in entry_set
@@ -200,6 +288,10 @@ class Rel:
     def __contains__(self, entry: Entry) -> bool:
         """
         Whether the given entry is in the relation.
+
+        The entry is normalised, not validated: see :ref:`entry-normalisation`. An
+        entry which is out of range is therefore not reported as absent, it is taken to
+        be the entry it normalises to.
 
         :meta public:
         """
@@ -308,7 +400,7 @@ class Rel:
             return NotImplemented
         if self.__shape != other.shape:
             raise ValueError("Intersection requires relations to have the same shape.")
-        self.__data = self.__data.intersection(other.__data)
+        self.__data.intersection_update(other.__data)
         return self
 
     def __ior__(self, other: "Rel") -> Self:
@@ -321,7 +413,7 @@ class Rel:
             return NotImplemented
         if self.__shape != other.shape:
             raise ValueError("Union requires relations to have the same shape.")
-        self.__data = self.__data.union(other.__data)
+        self.__data.update(other.__data)
         return self
 
     def __ixor__(self, other: "Rel") -> Self:
@@ -336,7 +428,7 @@ class Rel:
             raise ValueError(
                 "Symmetric difference requires relations to have the same shape."
             )
-        self.__data = self.__data.symmetric_difference(other.__data)
+        self.__data.symmetric_difference_update(other.__data)
         return self
 
     def __isub__(self, other: "Rel") -> Self:
@@ -349,12 +441,16 @@ class Rel:
             return NotImplemented
         if self.__shape != other.shape:
             raise ValueError("Difference requires relations to have the same shape.")
-        self.__data = self.__data.difference(other.__data)
+        self.__data.difference_update(other.__data)
         return self
 
     def __eq__(self, other: Any) -> bool:
         """
         Equality comparison between relations, as sets of entries.
+
+        Relations of different shape are never equal, but no error is raised: unlike
+        the containment comparisons, equality is total. Note that defining this method
+        makes relations unhashable, as befits a mutable container.
 
         :meta public:
         """
@@ -368,6 +464,12 @@ class Rel:
         """
         Strict containment comparison between relations, as sets of entries.
 
+        Unlike :meth:`Rel.__eq__`, this raises on a shape mismatch rather than
+        returning :obj:`False`: containment between relations over different domains is
+        much more likely to indicate a bug than a meaningful query.
+
+        :raises ValueError: if the two relations have different shapes.
+
         :meta public:
         """
         if not isinstance(other, Rel):
@@ -380,6 +482,11 @@ class Rel:
         """
         Containment comparison between relations, as sets of entries.
 
+        Unlike :meth:`Rel.__eq__`, this raises on a shape mismatch rather than
+        returning :obj:`False`: see :meth:`Rel.__lt__`.
+
+        :raises ValueError: if the two relations have different shapes.
+
         :meta public:
         """
         if not isinstance(other, Rel):
@@ -390,6 +497,36 @@ class Rel:
 
     def __repr__(self) -> str:
         return f"<Rel of shape {self.__shape} with {len(self)} entries>"
+
+    def __getnewargs__(self) -> tuple[Shape]:
+        """
+        Returns the arguments to :meth:`Rel.__new__` used to unpickle the relation,
+        namely its shape. The entries are restored separately, by
+        :meth:`Rel.__setstate__`.
+
+        :meta public:
+        """
+        return (self.__shape,)
+
+    def __getstate__(self) -> bytes:
+        """
+        Returns the state used to pickle the relation, as the serialised form of the
+        underlying bitmap. The shape is not part of the state, because it is already
+        restored by :meth:`Rel.__getnewargs__`.
+
+        :meta public:
+        """
+        return bytes(self.__data.serialize())
+
+    def __setstate__(self, state: bytes) -> None:
+        """
+        Restores the entries of a relation being unpickled, from the state returned by
+        :meth:`Rel.__getstate__`. The shape and strides have already been set by
+        :meth:`Rel.__new__`, via :meth:`Rel.__getnewargs__`.
+
+        :meta public:
+        """
+        self.__data = BitMap64.deserialize(state)
 
     @staticmethod
     def iter_entries(shape: Iterable[int]) -> Iterator[Entry]:
@@ -413,14 +550,14 @@ class Rel:
         return tuple(entry)
 
     def __with_new_data(self, new_data: BitMap64) -> "Rel":
-        instance = super().__new__(Rel)
+        instance = object.__new__(Rel)
         instance.__shape = self.__shape
         instance.__strides = self.__strides
         instance.__data = new_data
         return instance
 
     @staticmethod
-    def __strides_from_shape(shape: tuple[int, ...]) -> tuple[int, ...]:
+    def __strides_from_shape(shape: Shape) -> tuple[int, ...]:
         seq = (1,) + tuple(reversed(shape))[:-1]
         prod = 1
         strides: list[int] = []
