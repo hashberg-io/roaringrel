@@ -1,6 +1,5 @@
 """Autodoc extension to document attributes and signatures based on Python type hints."""
 
-# Copyright (C) 2023 Hashberg Ltd
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Lesser General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
@@ -11,13 +10,12 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # GNU Lesser General Public License for more details.
 
-# You should have received a copy of the GNU Affero General Public License
+# You should have received a copy of the GNU Lesser General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-# TODO: fix the handling of generic parameter syntax (currently, not found).
-# TODO: fix the documentation of Protocol methods (no methods documented).
-# TODO: clean up the handling of custom descriptors (e.g. cached_property).
+from __future__ import annotations
 
+import annotationlib
 from collections import deque
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass
@@ -26,22 +24,15 @@ import inspect
 import re
 import traceback
 from types import FunctionType, ModuleType
-from typing import Any, ForwardRef, Optional
+from typing import Any
 from sphinx.application import Sphinx
 from sphinx.util import logging
-
-import sys
-
-if sys.version_info >= (3, 14):    
-    import annotationlib
-
-
 
 logger = logging.getLogger(__name__)
 
 # In conf.py, can use property_descriptors and/or cached_property_descriptors
 # to specify descriptor classes which should be documented as (cached) properties.
-# For example, the following is in config.py for the tensorsat project:
+# For example, the following is in conf.py for the tensorsat project:
 # cached_property_descriptors = {"tensorsat._utils.meta.cached_property"}
 
 PROPERTY_DESCRIPTORS: set[str] = set()
@@ -56,7 +47,7 @@ class ParsedType:
     r"""Dataclass for a parsed type."""
 
     name: str
-    args: None | str | tuple["ParsedType", ...] = None
+    args: None | str | tuple[ParsedType, ...] = None
     variadic: bool = False
 
     def __post_init__(self) -> None:
@@ -76,7 +67,7 @@ class ParsedType:
         if isinstance(args, str) and not args:
             raise ValueError("Literal type must include at least one value.")
 
-    def crossref(self, globalns: Optional[Mapping[str, Any]] = None) -> str:
+    def crossref(self, globalns: Mapping[str, Any] | None = None) -> str:
         """Generates Sphinx cross-reference link for the given type, using local names."""
         if globalns is None:
             globalns = {}
@@ -241,7 +232,7 @@ def _parse_type_args(
         if arg.name == "...":
             if i < len(arg_ranges) - 1:
                 raise ValueError(
-                    "Ellipsis found in args, but not in last position,  at "
+                    "Ellipsis found in args, but not in last position, at "
                     f"{start = }, {stop = }, {annotation[start:stop] = }, {annotation = }"
                 )
             variadic = True
@@ -339,27 +330,16 @@ def _sigdoc(fun: FunctionType, lines: list[str]) -> None:
     lines.append("")
     # FIXME: if an :rtype: line already exists, remove it here and re-append it after all param type lines.
     globalns = fun.__globals__
-    sig = inspect.signature(fun)
-    if sys.version_info >= (3, 14):
-        annotations = annotationlib.get_annotations(fun, format=annotationlib.Format.STRING)
+    sig = inspect.signature(fun, annotation_format=annotationlib.Format.STRING)
     for p in sig.parameters.values():
-        if sys.version_info >= (3, 14):
-            annotation = annotations.get(p.name)
-        else:
-            annotation = p.annotation
-            if annotation == p.empty:
-                continue
-        if annotation is None:
+        annotation = p.annotation
+        if annotation == p.empty:
             continue
         if not isinstance(annotation, str):
-            if isinstance(annotation, ForwardRef):
-                annotation = annotation.__forward_arg__
-            else:
-                logger.warning(
-                    f"Found non-string annotation: {repr(annotation)}."
-                    " Did you forget to import annotation from __future__?."
-                )
-                annotation = str(annotation)
+            # STRING-format signatures yield string annotations; coerce anything
+            # unexpected rather than failing.
+            logger.warning(f"Found non-string annotation: {annotation!r}.")
+            annotation = str(annotation)
         try:
             t = parse_type(annotation)
             tx = t.crossref(globalns)
@@ -393,31 +373,11 @@ def _sigdoc(fun: FunctionType, lines: list[str]) -> None:
             lines.append(f":param {p.name}:")
         if f":type {p.name}:" not in doc:
             lines.append(line)
-    if sys.version_info >= (3, 14):
-        return_annotation = annotations.get("return")
-        if return_annotation is None:
-            return
-    else:
-        return_annotation = sig.return_annotation
-        if return_annotation == sig.empty or return_annotation is None:
-            return
-    if not isinstance(return_annotation, str):
-        if isinstance(return_annotation, ForwardRef):
-            return_annotation = return_annotation.__forward_arg__
-        else:
-            logger.warning(
-                f"Found non-string return annotation: {repr(return_annotation)}."
-                " Did you forget to import annotation from __future__?."
-            )
-            if isinstance(return_annotation, type):
-                return_annotation = return_annotation.__qualname__
-            else:
-                return_annotation = str(return_annotation)
+    if sig.return_annotation == sig.empty:
+        return
+
     try:
-        if sys.version_info >= (3, 14):
-            t = parse_type(return_annotation)
-        else:
-            t = parse_type(return_annotation)
+        t = parse_type(sig.return_annotation)
         tx = t.crossref(globalns)
     except Exception as e:
         logger.error(
@@ -483,7 +443,6 @@ def attr_doc_handler(
         classname = ".".join(fullname.split(".")[:-1])
         parent_class = _class_dict.get(classname)
         if parent_class is not None:
-            # annotations = parent_class.__annotations__
             annotations = annotationlib.get_annotations(
                 parent_class, format=annotationlib.Format.STRING
             )
@@ -493,18 +452,13 @@ def attr_doc_handler(
                 type_annotation = None
             if type_annotation is not None:
                 if not isinstance(type_annotation, str):
-                    if isinstance(type_annotation, ForwardRef):
-                        type_annotation = type_annotation.__forward_arg__
-                    else:
-                        logger.warning(
-                            f"Found non-string annotation: {repr(type_annotation)}."
-                            " Did you forget to import annotation from __future__?."
-                        )
-                        logger.warning(f"{annotations = }")
-                        type_annotation = str(type_annotation)
+                    # STRING-format annotations are strings; coerce anything
+                    # unexpected rather than failing.
+                    logger.warning(f"Found non-string annotation: {type_annotation!r}.")
+                    type_annotation = str(type_annotation)
                 t = parse_type(type_annotation)
                 tx = t.crossref()
-                if ":rtype:" not in "\n".join("lines"):
+                if ":rtype:" not in "\n".join(lines):
                     lines.append(f":rtype: {tx}")
     except Exception as e:
         tb_str = "\n".join(traceback.format_tb(e.__traceback__))
@@ -618,13 +572,11 @@ def _get_module_by_name(modname: str) -> ModuleType:
     return mod
 
 
-def _get_obj_mod(
-    app: Sphinx, what: str, fullname: str, obj: Any
-) -> Optional[ModuleType]:
+def _get_obj_mod(app: Sphinx, what: str, fullname: str, obj: Any) -> ModuleType | None:
     """Gathers the containing module for the given ``obj``."""
     autodoc_type_aliases = app.config.__dict__.get("autodoc_type_aliases")
     name = fullname.split(".")[-1]
-    obj_mod: Optional[ModuleType]
+    obj_mod: ModuleType | None
     if autodoc_type_aliases is not None:
         if name in autodoc_type_aliases and fullname == autodoc_type_aliases[name]:
             modname = ".".join(fullname.split(".")[:-1])
@@ -642,9 +594,6 @@ def _get_obj_mod(
     elif what == "attribute":
         modname = ".".join(fullname.split(".")[:-2])
         obj_mod = _get_module_by_name(modname)
-    elif what == "type":
-        modname = ".".join(fullname.split(".")[:-1])
-        obj_mod = _get_module_by_name(modname)
     else:
         logger.warning(
             f"Encountered unexpected value for what = {what} at fullname = {fullname}"
@@ -656,7 +605,7 @@ def _get_obj_mod(
 def _build_fullname_dict(
     app: Sphinx,
     fullname: str,
-    obj_mod: Optional[ModuleType],
+    obj_mod: ModuleType | None,
 ) -> dict[str, str]:
     """
     Builds a dictionary of substitutions from module global names to their fully qualified names,
@@ -719,7 +668,6 @@ def on_config_inited(app: Sphinx, _: Any) -> None:
 
 
 ### 6. Register Sphinx Event Handlers ###
-
 
 
 def setup(app: Sphinx) -> None:

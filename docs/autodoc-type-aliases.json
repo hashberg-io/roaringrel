@@ -1,1 +1,4 @@
-{}
+{
+    "Shape": "roaringrel.Shape",
+    "Entry": "roaringrel.Entry"
+}
