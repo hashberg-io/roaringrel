@@ -6,7 +6,7 @@ roaringrel
 Entry
 -----
 
-.. autodata:: roaringrel.Entry
+.. autotype:: roaringrel.Entry
 
 Rel
 ---
@@ -14,9 +14,9 @@ Rel
 .. autoclass:: roaringrel.Rel
     :show-inheritance:
     :members:
-    :special-members: __eq__, __lt__, __le__, __invert__, __and__, __or__, __sub__, __xor__, __iand__, __ior__, __isub__, __ixor__, __new__, __contains__
+    :special-members: __and__, __contains__, __eq__, __getnewargs__, __getstate__, __iand__, __invert__, __ior__, __isub__, __iter__, __ixor__, __le__, __len__, __lt__, __new__, __or__, __setstate__, __sub__, __xor__
 
 Shape
 -----
 
-.. autodata:: roaringrel.Shape
+.. autotype:: roaringrel.Shape
