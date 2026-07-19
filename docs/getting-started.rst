@@ -75,6 +75,7 @@ Relations support basic binary operators as sets of entries, restricted to opera
 >>> a|b # union
 <Rel of shape (2, 3, 4) with 3 entries>
 >>> list(a|b)
+[(0, 0, 0), (1, 1, 1), (1, 2, 3)]
 >>> a^b # symmetric difference
 <Rel of shape (2, 3, 4) with 2 entries>
 >>> list(a^b)
@@ -108,7 +109,9 @@ Relations are mutable, with support for addition, removal and flipping of indivi
 >>> a.flip((0, 0, 0)) # flip on missing entry: add
 >>> list(a)
 [(0, 0, 0), (1, 1, 1)]
->>> a.remove((1, 2, 3))
+>>> a.remove((1, 2, 3)) # remove entry which is not in the relation
+Traceback (most recent call last):
+    ...
 KeyError: (1, 2, 3)
 
 The update operations enable addition, removal and flipping (symmetric difference) of multiple entries at once:
@@ -158,3 +161,54 @@ False
 [(1, 1, 1), (1, 2, 3)]
 >>> list(s)
 [(0, 0, 0), (1, 1, 1), (1, 2, 3)]
+
+Relations can be pickled, and unpickle into independently mutable relations:
+
+>>> import pickle
+>>> r = Rel((2, 3, 4), [(0, 0, 0), (1, 1, 1), (1, 2, 3)])
+>>> s = pickle.loads(pickle.dumps(r))
+>>> r == s
+True
+>>> s.remove((0, 0, 0))
+>>> r == s
+False
+
+.. _entry-normalisation:
+
+Entry normalisation
+===================
+
+RoaringRel is a low-level library, intended for use in performance-critical code, so the methods which take entries never validate them.
+Entries are *normalised* instead: each element is reduced modulo the size of its own component set, so that negative elements index from the end of the component set, as is usual in Python, and out-of-range elements wrap around.
+
+>>> r = Rel((2, 3, 4))
+>>> r.add((0, -1, -1)) # negative elements index from the end
+>>> list(r)
+[(0, 2, 3)]
+>>> r.add((0, 5, 0)) # out-of-range elements wrap around
+>>> list(r)
+[(0, 2, 0), (0, 2, 3)]
+
+An entry shorter than the shape has its missing trailing elements taken to be zero, while an entry longer than the shape has its surplus elements ignored:
+
+>>> r = Rel((2, 3, 4))
+>>> r.add((1,)) # same as (1, 0, 0)
+>>> list(r)
+[(1, 0, 0)]
+>>> r.add((0, 1, 2, 9, 9)) # same as (0, 1, 2)
+>>> list(r)
+[(0, 1, 2), (1, 0, 0)]
+
+Because every element is reduced into the range of its own component set, normalisation is a total operation: no entry whatsoever can take a relation outside of its own shape, so an out-of-range entry cannot corrupt the relation.
+What it does instead is silently address a different, valid entry.
+
+Where that tradeoff is not acceptable, the :meth:`~roaringrel.Rel.validate_entry` method checks an entry against the shape of the relation:
+
+>>> r = Rel((2, 3, 4))
+>>> r.validate_entry((0, 1, 2)) # valid entry: no error
+>>> r.validate_entry((0, 5, 0)) # invalid entry: error
+Traceback (most recent call last):
+    ...
+ValueError: Expected element at index 1 to be in range(3), found 5 instead.
+
+This method is never called internally, so validation is entirely opt-in: code which understands the tradeoff above pays nothing for it.
