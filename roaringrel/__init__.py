@@ -535,7 +535,7 @@ class Rel:
 
     def __pack_entry(self, entry: Entry) -> int:
         return sum(
-            ((idx + dim) % dim) * stride
+            (idx % dim) * stride
             for idx, dim, stride in zip(entry, self.__shape, self.__strides)
         )
 
