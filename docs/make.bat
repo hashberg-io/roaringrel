@@ -6,7 +6,6 @@ REM Command file for Sphinx documentation
 
 if "%SPHINXBUILD%" == "" (
 	set SPHINXBUILD=sphinx-build
-	@REM set SPHINXBUILD=python3.13 -m sphinx build
 )
 set SOURCEDIR=.
 set BUILDDIR=_build
@@ -35,7 +34,6 @@ goto end
 
 :api
 python make-api.py
-@REM python3.13 make-api.py
 
 :end
 popd
