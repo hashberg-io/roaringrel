@@ -17,10 +17,26 @@ from __future__ import annotations
 import inspect
 import json
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.abspath(".."))
 import sphinx_rtd_theme  # type: ignore
+
+
+def _read_version() -> str:
+    """Reads __version__ from the package, without importing its dependencies."""
+    init_path = os.path.join(
+        os.path.dirname(__file__), "..", "roaringrel", "__init__.py"
+    )
+    with open(init_path, "r", encoding="utf-8") as f:
+        match = re.search(
+            r"""^__version__\s*=\s*["'](.+?)["']""", f.read(), re.MULTILINE
+        )
+    if match is None:
+        raise RuntimeError("Could not find __version__ in roaringrel/__init__.py")
+    return match.group(1)
+
 
 # -- Project information -----------------------------------------------------
 
@@ -34,9 +50,9 @@ author = "Hashberg"
 # built documents.
 #
 # The full version, including alpha/beta/rc tags.
-release = "1.0.0"
+release = _read_version()
 # The short X.Y version.
-version = "1.0.0"
+version = ".".join(release.split(".")[:2])
 
 
 # -- General configuration ---------------------------------------------------
@@ -94,9 +110,7 @@ from sphinx.environment import BuildEnvironment
 from sphinx.addnodes import pending_xref
 from typing import Any
 
-skip_missing_references: set[str] = {
-    "pyroaring.BitMap64"
-}
+skip_missing_references: set[str] = {"pyroaring.BitMap64"}
 
 property_descriptors: set[str] = set()
 cached_property_descriptors: set[str] = set()
