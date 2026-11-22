@@ -539,7 +539,7 @@ class Rel:
     @staticmethod
     def iter_entries(shape: Iterable[int]) -> Iterator[Entry]:
         """Iterates over all possible entries for the given shape."""
-        return iter(product(*map(range, shape)))
+        return product(*map(range, shape))
 
     def __pack_entry(self, entry: Entry) -> int:
         return sum(
@@ -548,13 +548,10 @@ class Rel:
         )
 
     def __unpack_idx(self, idx: int) -> Entry:
-        shape, strides = self.__shape, self.__strides
-        entry = [0] * len(shape)
-        idx_rem = idx
-        for i, (dim, stride) in enumerate(zip(shape, strides)):
-            val = idx_rem // stride
-            entry[i] = val % dim
-            idx_rem -= val * stride
+        entry: list[int] = []
+        for stride in self.__strides:
+            val, idx = divmod(idx, stride)
+            entry.append(val)
         return tuple(entry)
 
     def __with_new_data(self, new_data: BitMap64) -> Rel:
@@ -566,11 +563,7 @@ class Rel:
 
     @staticmethod
     def __strides_from_shape(shape: Shape) -> tuple[int, ...]:
-        seq = (1,) + tuple(reversed(shape))[:-1]
-        prod = 1
-        strides: list[int] = []
-        for x in seq:
-            prod *= int(x)
-            strides.append(prod)
-        strides.reverse()
+        strides = [1] * len(shape)
+        for i in range(len(shape) - 1, 0, -1):
+            strides[i - 1] = strides[i] * shape[i]
         return tuple(strides)
