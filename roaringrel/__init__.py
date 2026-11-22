@@ -22,7 +22,8 @@ __version__ = "1.1.0"
 from collections.abc import Iterable, Iterator
 from itertools import product
 from math import prod
-from typing import Self, final
+from operator import index
+from typing import Self, SupportsIndex, final
 
 from pyroaring import BitMap64
 
@@ -110,7 +111,7 @@ class Rel:
 
     def __new__(
         cls,
-        shape: Iterable[int],
+        shape: Iterable[SupportsIndex],
         data: BitMap64 | Iterable[Entry] | None = None,
     ) -> Self:
         """
@@ -128,6 +129,7 @@ class Rel:
         relation to be reinterpreted under any shape large enough to hold its indices,
         while ruling out indices which would fall outside the new shape.
 
+        :raises TypeError: if any component set size is not an integer.
         :raises ValueError: if any component set size is not strictly positive.
         :raises ValueError: if a given relation or bitmap contains an index which is
             out of range for the given shape.
@@ -136,18 +138,18 @@ class Rel:
 
         :meta public:
         """
-        shape = tuple(shape)
-        if any(s <= 0 for s in shape):
+        rel_shape: Shape = tuple(map(index, shape))
+        if any(s <= 0 for s in rel_shape):
             raise ValueError("Component set sizes must be strictly positive.")
-        total_size = prod(shape)
+        total_size = prod(rel_shape)
         if total_size >= (1 << 64):
             raise NotImplementedError(
                 "The maximum supported size for the Cartesian product "
                 "of component sets is 2**64-1."
             )
         self = object.__new__(cls)
-        self.__shape = shape
-        self.__strides = Rel.__strides_from_shape(shape)
+        self.__shape = rel_shape
+        self.__strides = Rel.__strides_from_shape(rel_shape)
         if data is None:
             self.__data = BitMap64()
         elif isinstance(data, BitMap64):
@@ -524,9 +526,15 @@ class Rel:
         :meth:`Rel.__getstate__`. The shape and strides have already been set by
         :meth:`Rel.__new__`, via :meth:`Rel.__getnewargs__`.
 
+        :raises ValueError: if the state contains an index which is out of range for
+            the shape of the relation.
+
         :meta public:
         """
-        self.__data = BitMap64.deserialize(state)
+        data = BitMap64.deserialize(state)
+        if data and data.max() >= prod(self.__shape):
+            raise ValueError("Pickled state contains invalid entries.")
+        self.__data = data
 
     @staticmethod
     def iter_entries(shape: Iterable[int]) -> Iterator[Entry]:

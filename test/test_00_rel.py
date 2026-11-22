@@ -1,7 +1,9 @@
+import copy
 import pickle
 from itertools import product
 from math import isqrt, prod
 import pytest
+import numpy as np
 from numpy.random import default_rng
 from pyroaring import BitMap64
 from roaringrel import Entry, Rel, Shape
@@ -357,12 +359,57 @@ def test_pickle(shape: Shape, entryset: frozenset[Entry]) -> None:
         assert frozenset(rel) == entryset
 
 
+@pytest.mark.parametrize(
+    "shape,entryset",
+    [
+        (shape, entryset)
+        for shape, entryset_samples in rel_param_samples.items()
+        for entryset in entryset_samples
+    ],
+)
+def test_copy_module(shape: Shape, entryset: frozenset[Entry]) -> None:
+    rel = Rel(shape, entryset)
+    for clone in (copy.copy(rel), copy.deepcopy(rel)):
+        assert clone == rel
+        assert clone is not rel
+        clone.symmetric_difference_update(Rel.iter_entries(shape))
+        assert frozenset(rel) == entryset
+
+
+def test_unpickling_rejects_invalid_state() -> None:
+    rel = Rel((2, 2), [(1, 1)])
+    state = bytes(BitMap64([3]).serialize())
+    assert pickle.loads(pickle.dumps(rel)) == rel
+    for idx in [4, 99, 1 << 40]:
+        tampered = pickle.dumps(rel).replace(state, bytes(BitMap64([idx]).serialize()))
+        with pytest.raises(ValueError):
+            pickle.loads(tampered)
+
+
 def test_constructor_rejects_invalid_shape() -> None:
     for shape in [(0,), (2, 0), (-1,), (2, -3, 4)]:
         with pytest.raises(ValueError):
             Rel(shape)
     with pytest.raises(NotImplementedError):
         Rel((1 << 32, 1 << 32))
+
+
+def test_constructor_converts_shape_to_int() -> None:
+    rel = Rel([np.int64(2), np.uint8(3), True], [(1, 2, 0)])
+    assert rel.shape == (2, 3, 1)
+    assert all(type(s) is int for s in rel.shape)
+    assert list(rel) == [(1, 2, 0)]
+
+
+def test_constructor_rejects_non_integer_shape() -> None:
+    for shape in [(2.0,), (2, 3.5), ("2",), (None,)]:
+        with pytest.raises(TypeError):
+            Rel(shape)  # type: ignore[arg-type]
+
+
+def test_constructor_rejects_oversized_numpy_shape() -> None:
+    with pytest.raises(NotImplementedError):
+        Rel((np.int64(1 << 40), np.int64(1 << 40)))
 
 
 def test_constructor_rejects_invalid_bitmap() -> None:
