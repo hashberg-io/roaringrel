@@ -4,7 +4,7 @@
 [![PyPI version](https://img.shields.io/pypi/v/roaringrel.svg)](https://pypi.python.org/pypi/roaringrel/)
 [![PyPI status](https://img.shields.io/pypi/status/roaringrel.svg)](https://pypi.python.org/pypi/roaringrel/)
 [![Checked with Mypy](http://www.mypy-lang.org/static/mypy_badge.svg)](https://github.com/python/mypy)
-[![Documentation Status](https://readthedocs.org/projects/roaringrel/badge/?version=latest)](https://roaringrel.readthedocs.io/en/latest/?badge=latest)
+[![Documentation Status](https://img.shields.io/readthedocs/roaringrel/latest)](https://roaringrel.readthedocs.io/en/latest/)
 
 RoaringRel is a low-level mutable data structure for finite relations `R ⊆ X₁ × ... × Xₙ` between finite sets, built on 64-bit [roaring bitmaps](http://roaringbitmap.org/).
 It presumes that the *component sets* `X₁,...,Xₙ` are zero-based contiguous integer ranges `Xⱼ = {0,...,sⱼ-1}`: the tuple `(s₁,...,sₙ)` of component set sizes is the *shape* of the relation, and the tuples `(x₁,...,xₙ) ∈ R` are its *entries*.
