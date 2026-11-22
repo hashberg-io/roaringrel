@@ -9,6 +9,7 @@ import json
 import os
 import pkgutil
 import sys
+import types
 from dataclasses import dataclass, field
 from types import ModuleType
 from typing import Any, Callable, TypeAliasType
@@ -24,6 +25,11 @@ def _list_package_contents(pkg_name: str) -> list[str]:
         else:
             modules.append(submod_fullname)
     return modules
+
+
+def _is_private_module(mod_name: str) -> bool:
+    """Checks whether any component of the given dotted module name is private."""
+    return any(part.startswith("_") for part in mod_name.split("."))
 
 
 def _public_special_members(cls: type) -> list[str]:
@@ -200,6 +206,12 @@ class MakeApiConfig:
             return cls.from_dict(json.load(f))
 
 
+def _is_lazy_import(obj: Any) -> bool:
+    """Checks whether the given object is a pending lazy import."""
+    lazy_import_type = getattr(types, "LazyImportType", None)
+    return lazy_import_type is not None and isinstance(obj, lazy_import_type)
+
+
 def _collect_type_aliases(
     manual: dict[str, list[str]], modules_dict: dict[str, ModuleType]
 ) -> dict[str, list[str]]:
@@ -254,7 +266,7 @@ def make_apidocs() -> None:
     include_members = {key: list(value) for key, value in cfg.include_members.items()}
     exclude_members = cfg.exclude_members
     include_modules = cfg.include_modules
-    exclude_modules = cfg.exclude_modules
+    exclude_modules = list(cfg.exclude_modules)
     member_fullnames = cfg.member_fullnames
     special_class_members = cfg.special_class_members
     manual_doc = cfg.manual_doc
@@ -268,6 +280,11 @@ def make_apidocs() -> None:
         if mod_name not in modules_dict:
             modules_dict[mod_name] = importlib.import_module(mod_name)
     os.chdir(cwd)
+    exclude_modules.extend(
+        mod_name
+        for mod_name in modules_dict
+        if _is_private_module(mod_name) and mod_name not in include_modules
+    )
 
     type_aliases = _collect_type_aliases(cfg.type_aliases, modules_dict)
     for mod_name, type_alias_members in type_aliases.items():
@@ -325,10 +342,15 @@ def make_apidocs() -> None:
             )
             if to_exclude:
                 continue
-            member = getattr(mod, member_name)
             if member_name.startswith("_") and not to_include:
                 continue
-            member = getattr(mod, member_name)
+            try:
+                member = getattr(mod, member_name)
+            except ImportError as e:
+                if not _is_lazy_import(vars(mod).get(member_name)):
+                    raise
+                print(f"    skipped {member_name} (unresolved lazy import: {e})")
+                continue
             member_module = inspect.getmodule(member)
             member_module_name = (
                 member_module.__name__ if member_module is not None else None
