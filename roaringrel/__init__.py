@@ -22,7 +22,7 @@ __version__ = "1.1.0"
 from collections.abc import Iterable, Iterator
 from itertools import product
 from math import prod
-from typing import Any, Self, final
+from typing import Self, final
 
 from pyroaring import BitMap64
 
@@ -172,7 +172,7 @@ class Rel:
         """The shape of the relation, i.e. the tuple of sizes for its component sets."""
         return self.__shape
 
-    def copy(self) -> "Rel":
+    def copy(self) -> Rel:
         """Returns a copy of the relation (independently mutable)."""
         copy = object.__new__(Rel)
         copy.__shape = self.__shape
@@ -315,7 +315,7 @@ class Rel:
         """
         return len(self.__data)
 
-    def __invert__(self) -> "Rel":
+    def __invert__(self) -> Rel:
         """
         Returns the relation's complement within the set of all possible entries for
         the relation's own shape.
@@ -328,7 +328,7 @@ class Rel:
         new_data.difference_update(curr_bitset)
         return self.__with_new_data(new_data)
 
-    def __and__(self, other: "Rel") -> "Rel":
+    def __and__(self, other: Rel) -> Rel:
         """
         Returns the intersection of this relation and a given relation of same shape.
 
@@ -343,7 +343,7 @@ class Rel:
         new_data = self.__data.intersection(other.__data)
         return self.__with_new_data(new_data)
 
-    def __or__(self, other: "Rel") -> "Rel":
+    def __or__(self, other: Rel) -> Rel:
         """
         Returns the union of this relation and a given relation of same shape.
 
@@ -358,7 +358,7 @@ class Rel:
         new_data = self.__data.union(other.__data)
         return self.__with_new_data(new_data)
 
-    def __xor__(self, other: "Rel") -> "Rel":
+    def __xor__(self, other: Rel) -> Rel:
         """
         Returns the symmetric diff of this relation and a given relation of same shape.
 
@@ -375,7 +375,7 @@ class Rel:
         new_data = self.__data.symmetric_difference(other.__data)
         return self.__with_new_data(new_data)
 
-    def __sub__(self, other: "Rel") -> "Rel":
+    def __sub__(self, other: Rel) -> Rel:
         """
         Returns the difference of this relation and a given relation of same shape.
 
@@ -390,7 +390,7 @@ class Rel:
         new_data = self.__data.difference(other.__data)
         return self.__with_new_data(new_data)
 
-    def __iand__(self, other: "Rel") -> Self:
+    def __iand__(self, other: Rel) -> Self:
         """
         Inplace version of :meth:`Rel.__and__`, mutating the lhs relation.
 
@@ -403,7 +403,7 @@ class Rel:
         self.__data.intersection_update(other.__data)
         return self
 
-    def __ior__(self, other: "Rel") -> Self:
+    def __ior__(self, other: Rel) -> Self:
         """
         Inplace version of :meth:`Rel.__or__`, mutating the lhs relation.
 
@@ -416,7 +416,7 @@ class Rel:
         self.__data.update(other.__data)
         return self
 
-    def __ixor__(self, other: "Rel") -> Self:
+    def __ixor__(self, other: Rel) -> Self:
         """
         Inplace version of :meth:`Rel.__xor__`, mutating the lhs relation.
 
@@ -431,7 +431,7 @@ class Rel:
         self.__data.symmetric_difference_update(other.__data)
         return self
 
-    def __isub__(self, other: "Rel") -> Self:
+    def __isub__(self, other: Rel) -> Self:
         """
         Inplace version of :meth:`Rel.__sub__`, mutating the lhs relation.
 
@@ -444,7 +444,7 @@ class Rel:
         self.__data.difference_update(other.__data)
         return self
 
-    def __eq__(self, other: Any) -> bool:
+    def __eq__(self, other: object) -> bool:
         """
         Equality comparison between relations, as sets of entries.
 
@@ -460,7 +460,7 @@ class Rel:
             return False
         return self.__data == other.__data
 
-    def __lt__(self, other: Any) -> bool:
+    def __lt__(self, other: object) -> bool:
         """
         Strict containment comparison between relations, as sets of entries.
 
@@ -478,7 +478,7 @@ class Rel:
             raise ValueError("Comparison requires relations to have the same shape.")
         return self.__data < other.__data
 
-    def __le__(self, other: Any) -> bool:
+    def __le__(self, other: object) -> bool:
         """
         Containment comparison between relations, as sets of entries.
 
@@ -549,7 +549,7 @@ class Rel:
             idx_rem -= val * stride
         return tuple(entry)
 
-    def __with_new_data(self, new_data: BitMap64) -> "Rel":
+    def __with_new_data(self, new_data: BitMap64) -> Rel:
         instance = object.__new__(Rel)
         instance.__shape = self.__shape
         instance.__strides = self.__strides
