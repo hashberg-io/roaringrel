@@ -22,7 +22,8 @@ __version__ = "1.1.0"
 from collections.abc import Iterable, Iterator
 from itertools import product
 from math import prod
-from typing import Any, Self, final
+from operator import index
+from typing import Self, SupportsIndex, final
 
 from pyroaring import BitMap64
 
@@ -110,7 +111,7 @@ class Rel:
 
     def __new__(
         cls,
-        shape: Iterable[int],
+        shape: Iterable[SupportsIndex],
         data: BitMap64 | Iterable[Entry] | None = None,
     ) -> Self:
         """
@@ -128,6 +129,7 @@ class Rel:
         relation to be reinterpreted under any shape large enough to hold its indices,
         while ruling out indices which would fall outside the new shape.
 
+        :raises TypeError: if any component set size is not an integer.
         :raises ValueError: if any component set size is not strictly positive.
         :raises ValueError: if a given relation or bitmap contains an index which is
             out of range for the given shape.
@@ -136,18 +138,18 @@ class Rel:
 
         :meta public:
         """
-        shape = tuple(shape)
-        if any(s <= 0 for s in shape):
+        rel_shape: Shape = tuple(map(index, shape))
+        if any(s <= 0 for s in rel_shape):
             raise ValueError("Component set sizes must be strictly positive.")
-        total_size = prod(shape)
+        total_size = prod(rel_shape)
         if total_size >= (1 << 64):
             raise NotImplementedError(
                 "The maximum supported size for the Cartesian product "
                 "of component sets is 2**64-1."
             )
         self = object.__new__(cls)
-        self.__shape = shape
-        self.__strides = Rel.__strides_from_shape(shape)
+        self.__shape = rel_shape
+        self.__strides = Rel.__strides_from_shape(rel_shape)
         if data is None:
             self.__data = BitMap64()
         elif isinstance(data, BitMap64):
@@ -172,7 +174,7 @@ class Rel:
         """The shape of the relation, i.e. the tuple of sizes for its component sets."""
         return self.__shape
 
-    def copy(self) -> "Rel":
+    def copy(self) -> Rel:
         """Returns a copy of the relation (independently mutable)."""
         copy = object.__new__(Rel)
         copy.__shape = self.__shape
@@ -315,7 +317,7 @@ class Rel:
         """
         return len(self.__data)
 
-    def __invert__(self) -> "Rel":
+    def __invert__(self) -> Rel:
         """
         Returns the relation's complement within the set of all possible entries for
         the relation's own shape.
@@ -328,7 +330,7 @@ class Rel:
         new_data.difference_update(curr_bitset)
         return self.__with_new_data(new_data)
 
-    def __and__(self, other: "Rel") -> "Rel":
+    def __and__(self, other: Rel) -> Rel:
         """
         Returns the intersection of this relation and a given relation of same shape.
 
@@ -343,7 +345,7 @@ class Rel:
         new_data = self.__data.intersection(other.__data)
         return self.__with_new_data(new_data)
 
-    def __or__(self, other: "Rel") -> "Rel":
+    def __or__(self, other: Rel) -> Rel:
         """
         Returns the union of this relation and a given relation of same shape.
 
@@ -358,7 +360,7 @@ class Rel:
         new_data = self.__data.union(other.__data)
         return self.__with_new_data(new_data)
 
-    def __xor__(self, other: "Rel") -> "Rel":
+    def __xor__(self, other: Rel) -> Rel:
         """
         Returns the symmetric diff of this relation and a given relation of same shape.
 
@@ -375,7 +377,7 @@ class Rel:
         new_data = self.__data.symmetric_difference(other.__data)
         return self.__with_new_data(new_data)
 
-    def __sub__(self, other: "Rel") -> "Rel":
+    def __sub__(self, other: Rel) -> Rel:
         """
         Returns the difference of this relation and a given relation of same shape.
 
@@ -390,7 +392,7 @@ class Rel:
         new_data = self.__data.difference(other.__data)
         return self.__with_new_data(new_data)
 
-    def __iand__(self, other: "Rel") -> Self:
+    def __iand__(self, other: Rel) -> Self:
         """
         Inplace version of :meth:`Rel.__and__`, mutating the lhs relation.
 
@@ -403,7 +405,7 @@ class Rel:
         self.__data.intersection_update(other.__data)
         return self
 
-    def __ior__(self, other: "Rel") -> Self:
+    def __ior__(self, other: Rel) -> Self:
         """
         Inplace version of :meth:`Rel.__or__`, mutating the lhs relation.
 
@@ -416,7 +418,7 @@ class Rel:
         self.__data.update(other.__data)
         return self
 
-    def __ixor__(self, other: "Rel") -> Self:
+    def __ixor__(self, other: Rel) -> Self:
         """
         Inplace version of :meth:`Rel.__xor__`, mutating the lhs relation.
 
@@ -431,7 +433,7 @@ class Rel:
         self.__data.symmetric_difference_update(other.__data)
         return self
 
-    def __isub__(self, other: "Rel") -> Self:
+    def __isub__(self, other: Rel) -> Self:
         """
         Inplace version of :meth:`Rel.__sub__`, mutating the lhs relation.
 
@@ -444,7 +446,7 @@ class Rel:
         self.__data.difference_update(other.__data)
         return self
 
-    def __eq__(self, other: Any) -> bool:
+    def __eq__(self, other: object) -> bool:
         """
         Equality comparison between relations, as sets of entries.
 
@@ -460,7 +462,7 @@ class Rel:
             return False
         return self.__data == other.__data
 
-    def __lt__(self, other: Any) -> bool:
+    def __lt__(self, other: object) -> bool:
         """
         Strict containment comparison between relations, as sets of entries.
 
@@ -478,7 +480,7 @@ class Rel:
             raise ValueError("Comparison requires relations to have the same shape.")
         return self.__data < other.__data
 
-    def __le__(self, other: Any) -> bool:
+    def __le__(self, other: object) -> bool:
         """
         Containment comparison between relations, as sets of entries.
 
@@ -496,6 +498,12 @@ class Rel:
         return self.__data <= other.__data
 
     def __repr__(self) -> str:
+        """
+        Returns a string representation of the relation, stating its shape and its
+        number of entries.
+
+        :meta public:
+        """
         return f"<Rel of shape {self.__shape} with {len(self)} entries>"
 
     def __getnewargs__(self) -> tuple[Shape]:
@@ -524,14 +532,20 @@ class Rel:
         :meth:`Rel.__getstate__`. The shape and strides have already been set by
         :meth:`Rel.__new__`, via :meth:`Rel.__getnewargs__`.
 
+        :raises ValueError: if the state contains an index which is out of range for
+            the shape of the relation.
+
         :meta public:
         """
-        self.__data = BitMap64.deserialize(state)
+        data = BitMap64.deserialize(state)
+        if data and data.max() >= prod(self.__shape):
+            raise ValueError("Pickled state contains invalid entries.")
+        self.__data = data
 
     @staticmethod
     def iter_entries(shape: Iterable[int]) -> Iterator[Entry]:
         """Iterates over all possible entries for the given shape."""
-        return iter(product(*map(range, shape)))
+        return product(*map(range, shape))
 
     def __pack_entry(self, entry: Entry) -> int:
         return sum(
@@ -540,16 +554,13 @@ class Rel:
         )
 
     def __unpack_idx(self, idx: int) -> Entry:
-        shape, strides = self.__shape, self.__strides
-        entry = [0] * len(shape)
-        idx_rem = idx
-        for i, (dim, stride) in enumerate(zip(shape, strides)):
-            val = idx_rem // stride
-            entry[i] = val % dim
-            idx_rem -= val * stride
+        entry: list[int] = []
+        for stride in self.__strides:
+            val, idx = divmod(idx, stride)
+            entry.append(val)
         return tuple(entry)
 
-    def __with_new_data(self, new_data: BitMap64) -> "Rel":
+    def __with_new_data(self, new_data: BitMap64) -> Rel:
         instance = object.__new__(Rel)
         instance.__shape = self.__shape
         instance.__strides = self.__strides
@@ -558,11 +569,7 @@ class Rel:
 
     @staticmethod
     def __strides_from_shape(shape: Shape) -> tuple[int, ...]:
-        seq = (1,) + tuple(reversed(shape))[:-1]
-        prod = 1
-        strides: list[int] = []
-        for x in seq:
-            prod *= int(x)
-            strides.append(prod)
-        strides.reverse()
+        strides = [1] * len(shape)
+        for i in range(len(shape) - 1, 0, -1):
+            strides[i - 1] = strides[i] * shape[i]
         return tuple(strides)

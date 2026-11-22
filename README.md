@@ -1,6 +1,6 @@
 # RoaringRel
 
-[![Python versions](https://img.shields.io/badge/python-3.13+-green.svg)](https://docs.python.org/3.13/)
+[![Python versions](https://img.shields.io/badge/python-3.14+-green.svg)](https://docs.python.org/3.14/)
 [![PyPI version](https://img.shields.io/pypi/v/roaringrel.svg)](https://pypi.python.org/pypi/roaringrel/)
 [![PyPI status](https://img.shields.io/pypi/status/roaringrel.svg)](https://pypi.python.org/pypi/roaringrel/)
 [![Checked with Mypy](http://www.mypy-lang.org/static/mypy_badge.svg)](https://github.com/python/mypy)
