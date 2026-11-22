@@ -498,6 +498,12 @@ class Rel:
         return self.__data <= other.__data
 
     def __repr__(self) -> str:
+        """
+        Returns a string representation of the relation, stating its shape and its
+        number of entries.
+
+        :meta public:
+        """
         return f"<Rel of shape {self.__shape} with {len(self)} entries>"
 
     def __getnewargs__(self) -> tuple[Shape]:
